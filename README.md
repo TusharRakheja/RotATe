@@ -48,5 +48,5 @@ sources:
     - "Levant_PPN"
 ```
 
-- Run the script with `./rotate.py`. You can tail the results using `tail -f ./results.csv`.
+- Run the script with `python3 ./rotate.py`. You can tail the results using `tail -f ./results.csv`.
 
