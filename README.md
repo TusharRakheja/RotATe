@@ -48,7 +48,13 @@ sources:
     - "Levant_PPN"
 ```
 
-- Run the script with `python3 ./rotate.py`. You can tail the results using `tail -f ./results.csv`.
+- Run the script with: 
+```
+python3 rotate.py -i [name.ind] -s [name.snp] -g [name.geno] -n [nthreads] -c ./config.yml
+```
+
+- You can tail the results using `tail -f "./results_$(md5sum config.yml | awk '{print $1}').csv"`.
+
 - When done, you can open the resulting csv file in Excel and trim the target name, sort by p-value etc.
 
 | **Target** | **Source 1**       | **Source 2**     | **Source 3**    | **Source 4**      | **Weight 1** | **Weight 2** | **Weight 3** | **Weight 4** | **Error 1** | **Error 2** | **Error 3** | **Error 4** | **p-value**  |
