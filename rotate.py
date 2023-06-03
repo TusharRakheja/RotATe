@@ -1,10 +1,52 @@
 import subprocess
 import itertools
+import argparse
+import hashlib
 import yaml
+import os
+
+from concurrent.futures import ThreadPoolExecutor
+from queue import Queue
 
 CORE_RIGHT = 'core_right'
 TARGET = 'target'
 SOURCES = 'sources'
+
+RESULTS_QUEUE = Queue()
+
+parser = argparse.ArgumentParser(
+    prog='rotATe',
+    description='Run rotating qpAdm models',
+    epilog='Copyright (c) 2023 Tushar Rakheja (The MIT License)'
+)
+
+parser.add_argument('-i', '--ind', dest='ind', type=str, help='Name of the .ind file', required=True)
+parser.add_argument('-s', '--snp', dest='snp', type=str, help='Name of the .snp file', required=True)
+parser.add_argument('-g', '--geno', dest='geno', type=str, help='Name of the .geno file', required=True)
+parser.add_argument(
+    '-c', '--config', dest='config', type=str, default='./config.yml', help='Path to the YAML config file (default: "./config.yml")'
+)
+parser.add_argument(
+    '-n', '--nthreads', dest='nthreads', type=int, default=1, help='The number of models to run in parallel (default: 1)'
+)
+
+args = parser.parse_args()
+
+IND = args.ind
+SNP = args.snp
+GENO = args.geno
+
+CONFIG_FILE = args.config
+MODELS_POOL = ThreadPoolExecutor(args.nthreads)
+
+PID = os.getpid()
+
+tempconfig = open(CONFIG_FILE, 'rb')
+SUFFIX = hashlib.md5(tempconfig.read()).hexdigest()
+tempconfig.close()
+
+RESULTS = './results_{}.csv'.format(SUFFIX)
+CACHE = './cache_{}.txt'.format(SUFFIX)
 
 def is_valid(conf):
     global CORE_RIGHT, TARGET, SOURCES
@@ -32,13 +74,22 @@ def is_valid(conf):
     return True
 
 
-def run(target, model, source_sets, core_sources):
-    with open('./left', 'w') as outfile:
+def run(model_number, target, model, source_sets, core_sources):
+    global PID
+
+    LEFT = './left_{}_{}'.format(PID, model_number)
+    RIGHT = './right_{}_{}'.format(PID, model_number)
+    OUTPUT = './output_{}_{}'.format(PID, model_number)
+    PARQPADM = './parqpadm_{}_{}'.format(PID, model_number)
+
+    generate_parqpadm(PARQPADM, LEFT[2:], RIGHT[2:])
+
+    with open(LEFT, 'w') as outfile:
         outfile.write("{}\n".format(target))
         for source in model:
             outfile.write("{}\n".format(source))
 
-    with open('./right', 'w') as outfile:
+    with open(RIGHT, 'w') as outfile:
         for source in core_sources:
             outfile.write("{}\n".format(source))
         for sources in source_sets:
@@ -46,10 +97,51 @@ def run(target, model, source_sets, core_sources):
                 if source not in model:
                     outfile.write("{}\n".format(source))
 
-    with open('./output', 'w') as outfile:
-        subprocess.call(['qpAdm', '-p', 'parqpadm'], stdout=outfile)
-    
-    with open('./output', 'r') as infile:
+    with open(OUTPUT, 'w') as outfile:
+        print("{} - Running model {}".format(model_number, model))
+        subprocess.call(['qpAdm', '-p', PARQPADM[2:]], stdout=outfile)
+
+    weights, errors, pvalue = weights_errors_pvalue(OUTPUT)
+    clean_up_model_files(LEFT, RIGHT, OUTPUT, PARQPADM, model)
+
+    return [target, model, weights, errors, pvalue]
+
+
+def write_results():
+    global RESULTS_QUEUE, RESULTS
+
+    while not RESULTS_QUEUE.empty():
+        with open(RESULTS, 'a') as outfile:
+            target, model, weights, errors, pvalue = RESULTS_QUEUE.get().result()
+            outfile.write(result_row(target, model, weights, errors, pvalue))
+            add_model_to_cache(model)
+
+
+def generate_parqpadm(parqpadm, left, right):
+    global IND, SNP, GENO
+    with open(parqpadm, 'w') as outfile:
+        outfile.write('indivname:       {}\n'.format(IND))
+        outfile.write('snpname:         {}\n'.format(SNP))
+        outfile.write('genotypename:    {}\n'.format(GENO))
+        outfile.write('popleft:         {}\n'.format(left))
+        outfile.write('popright:        {}\n'.format(right))
+        outfile.write('details:         YES\n')
+        outfile.write('allsnps:         YES\n')
+        outfile.write('inbreed:         NO\n')
+
+
+def clean_up_model_files(left, right, output, parqpadm, model):
+    try:
+        os.remove(left)
+        os.remove(right)
+        os.remove(output)
+        os.remove(parqpadm)
+    except OSError:
+        print("Error removing files for model {}. Runs are unaffected though.".format(model))
+
+
+def weights_errors_pvalue(output):
+    with open(output, 'r') as infile:
         l = infile.readlines()
     
     weights = None
@@ -88,26 +180,29 @@ def run(target, model, source_sets, core_sources):
     assert pvalue is not None
     assert read_pvalue is True
 
-    write_result_row(target, model, weights, errors, pvalue)
+    return [weights, errors, pvalue]
 
 
-def write_result_row(target, model, weights, errors, pvalue):
-    with open('./results.csv', 'a') as outfile:
-        outfile.write("{},".format(target))
-        for source in model:
-            outfile.write("{},".format(source))
-        for weight in weights:
-            outfile.write("{},".format(weight))
-        for error in errors:
-            outfile.write("{},".format(error))
-        outfile.write("{}\n".format(pvalue))
+def result_row(target, model, weights, errors, pvalue):
+    res = ""
+    res += "{},".format(target)
+    for source in model:
+        res += "{},".format(source)
+    for weight in weights:
+        res += "{},".format(weight)
+    for error in errors:
+        res += "{},".format(error)
+    res += "{}\n".format(pvalue)
+    return res
 
 
 def write_headers(num_sources):
-    try:
-        outfile = open('./results.csv', 'a')
-    except OSError:
-        outfile = open('./results.csv', 'w')
+    global RESULTS
+
+    if os.path.isfile(RESULTS):
+        return
+
+    outfile = open(RESULTS, 'w')
 
     outfile.write('Target,')
     for i in range(num_sources):
@@ -122,16 +217,15 @@ def write_headers(num_sources):
 
 
 def add_model_to_cache(model):
-    with open('./cache.txt', 'a') as outfile:
+    with open(CACHE, 'a') as outfile:
         outfile.write(','.join(model) + '\n')
-
 
 
 def is_model_in_cache(model):
     key = ','.join(model)
 
     try:
-        infile = open('./cache.txt', 'r')
+        infile = open(CACHE, 'r')
     except OSError:
         return False
 
@@ -147,9 +241,9 @@ def is_model_in_cache(model):
 
 
 def main():
-    global CORE_RIGHT, TARGET, SOURCES
+    global CORE_RIGHT, TARGET, SOURCES, CONFIG_FILE, MODELS_POOL
 
-    with open('./config.yml', 'r') as infile:
+    with open(CONFIG_FILE, 'r') as infile:
         config = None
         try:
             config = yaml.safe_load(infile)
@@ -167,18 +261,18 @@ def main():
     
     print("Will try {} models".format(len(models)))
 
-    i = 1
+    model_number = 1
     for model in models:
         if is_model_in_cache(model):
-            print("{} - Skipping model {} because already in cache.".format(i, model))
-            i += 1
+            print("{} - Skipping model {} because already in cache.".format(model_number, model))
+            model_number += 1
             continue
 
-        print("{} - Running model {}".format(i, model))
-        run(config[TARGET], model, source_sets, config[CORE_RIGHT])
-        add_model_to_cache(model)
+        task = MODELS_POOL.submit(run, model_number, config[TARGET], model, source_sets, config[CORE_RIGHT])
+        RESULTS_QUEUE.put(task)
+        model_number += 1
 
-        i += 1
+    write_results()
 
 
 if __name__ == '__main__':
