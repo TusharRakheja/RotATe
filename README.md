@@ -48,6 +48,11 @@ sources:
     - "Levant_PPN"
 ```
 
+- To view all of the script's options, do:
+```
+python3 rotate.py -h
+```
+
 - Run the script with: 
 ```
 python3 rotate.py -i [name.ind] -s [name.snp] -g [name.geno] -n [nthreads] -c ./config.yml
