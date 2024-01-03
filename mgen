@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+import argparse
+import sys
+import os
+
+from rotate import rotate
+from merge import merge
+from extract import extract
+
+parser = argparse.ArgumentParser(
+    prog='mgen',
+    description='Mehrgarh Genetics Toolkit',
+    epilog='Copyright (c) 2023 Tushar Rakheja (The MIT License)'
+)
+
+parser.add_argument('op', nargs=1, default=os.getcwd(), help="The operation you want to perform ('merge', 'rotate', 'extract')")
+
+
+def main():
+    global parser
+
+    args, _ = parser.parse_known_args()
+
+    args.op = args.op[0]
+
+    if args.op == 'rotate':
+        rotate.main()
+    elif args.op == 'merge':
+        merge.main()
+    elif args.op == 'extract':
+        extract.main()
+    else:
+        print("Unsupported operation '{}'.".format(args.op))
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

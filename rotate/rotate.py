@@ -12,43 +12,24 @@ CORE_RIGHT = 'core_right'
 TARGET = 'target'
 SOURCES = 'sources'
 
-RESULTS_QUEUE = Queue()
+RESULTS_QUEUE = None
+
+args = None
+IND = None
+SNP = None
+GENO = None
+CONFIG_FILE = None
+MODELS_POOL = None
+PID = None
+SUFFIX = None
+RESULTS = None
+CACHE = None
 
 parser = argparse.ArgumentParser(
-    prog='rotATe',
+    prog='rotate',
     description='Run rotating qpAdm models',
     epilog='Copyright (c) 2023 Tushar Rakheja (The MIT License)'
 )
-
-parser.add_argument('-i', '--ind', dest='ind', type=str, help='Name of the .ind file', required=True)
-parser.add_argument('-s', '--snp', dest='snp', type=str, help='Name of the .snp file', required=True)
-parser.add_argument('-g', '--geno', dest='geno', type=str, help='Name of the .geno file', required=True)
-parser.add_argument(
-    '-c', '--config', dest='config', type=str, default='./config.yml', help='Path to the YAML config file (default: "./config.yml")'
-)
-parser.add_argument(
-    '-n', '--nthreads', dest='nthreads', type=int, default=1, help='The number of models to run in parallel (default: 1)'
-)
-parser.add_argument('-e', '--error-coefficient', dest='error_coefficient', type=float, default=2.0, help='Error coefficient')
-parser.add_argument('-p', '--pmin', dest='pmin', type=float, default=0.01, help='Minimum viable p-value')
-
-args = parser.parse_args()
-
-IND = args.ind
-SNP = args.snp
-GENO = args.geno
-
-CONFIG_FILE = args.config
-MODELS_POOL = ThreadPoolExecutor(args.nthreads)
-
-PID = os.getpid()
-
-tempconfig = open(CONFIG_FILE, 'rb')
-SUFFIX = hashlib.md5(tempconfig.read()).hexdigest()
-tempconfig.close()
-
-RESULTS = './results_{}.csv'.format(SUFFIX)
-CACHE = './cache_{}.txt'.format(SUFFIX)
 
 def is_valid(conf):
     global CORE_RIGHT, TARGET, SOURCES, IND
@@ -73,9 +54,10 @@ def is_valid(conf):
             if not isinstance(source, str):
                 return False
 
-    with open('./{}'.format(IND), 'r') as infile:
+    #print("IND: {}".format(IND))
+    with open(IND, 'r') as infile:
         l = infile.readlines()
-    
+
     samples = set()
     for line in l:
         line = line.strip()
@@ -133,12 +115,13 @@ def run(model_number, target, model, source_sets, core_sources):
                         continue
 
                     if source not in model:
-                        outfile.write("{}\n".format(source))
+                        if args.rotate:
+                            outfile.write("{}\n".format(source))
 
 
         with open(OUTPUT, 'w') as outfile:
             print("{} - Running model {}".format(model_number, model))
-            subprocess.call(['qpAdm', '-p', PARQPADM[2:]], stdout=outfile)
+            subprocess.call([*(['wsl'] if args.turn_on_wsl_for_admix_tools else []), 'qpAdm', '-p', PARQPADM[2:]], stdout=outfile)
 
         weights, errors, pvalue = weights_errors_pvalue(OUTPUT)
         return [target, model, weights, errors, pvalue]
@@ -165,11 +148,17 @@ def write_results():
 
 
 def generate_parqpadm(parqpadm, left, right):
-    global IND, SNP, GENO
+    global IND, SNP, GENO, SUFFIX
     with open(parqpadm, 'w') as outfile:
-        outfile.write('indivname:       {}\n'.format(IND))
-        outfile.write('snpname:         {}\n'.format(SNP))
-        outfile.write('genotypename:    {}\n'.format(GENO))
+
+        if args.fstats == 'yes':
+            fstats_filename = 'fstats_{}'.format(SUFFIX) if args.use_fstats_file is None else args.use_fstats_file.split('/')[-1]
+            outfile.write('fstatsname:      {}\n'.format(fstats_filename))
+        else:
+            outfile.write('indivname:       {}\n'.format(IND))
+            outfile.write('snpname:         {}\n'.format(SNP))
+            outfile.write('genotypename:    {}\n'.format(GENO))
+
         outfile.write('popleft:         {}\n'.format(left))
         outfile.write('popright:        {}\n'.format(right))
         outfile.write('details:         YES\n')
@@ -177,14 +166,89 @@ def generate_parqpadm(parqpadm, left, right):
         outfile.write('inbreed:         NO\n')
 
 
+def generate_poplist(conf):
+    global CORE_RIGHT, TARGET, SOURCES, SUFFIX
+    
+    POPLIST = './poplist_{}'.format(SUFFIX)
+
+    if os.path.isfile(POPLIST):
+        # already exists
+        return
+
+    with open(POPLIST, 'w') as outfile:
+        for source in conf[CORE_RIGHT]:
+            outfile.write("{}\n".format(source))
+
+        for sources in conf[SOURCES]:
+            for source in sources:
+                outfile.write("{}\n".format(source))
+        
+        outfile.write(conf[TARGET])
+
+
+def generate_parqpfstats():
+    global IND, SNP, GENO, SUFFIX
+
+    PARQPFSTATS = './parqpfstats_{}'.format(SUFFIX)
+
+    if os.path.isfile(PARQPFSTATS):
+        # already exists
+        return
+
+    with open(PARQPFSTATS, 'w') as outfile:
+        outfile.write('indivname:       {}\n'.format(IND.split('/')[-1].strip()))
+        outfile.write('snpname:         {}\n'.format(SNP.split('/')[-1].strip()))
+        outfile.write('genotypename:    {}\n'.format(GENO.split('/')[-1].strip()))
+        outfile.write('poplistname:     poplist_{}\n'.format(SUFFIX))
+        outfile.write('fstatsoutname:   fstats_{}\n'.format(SUFFIX))
+        outfile.write('allsnps:         YES\n')
+        outfile.write('inbreed:         NO\n')
+        outfile.write('scale:           NO\n')
+
+
+def run_qpfstats():
+    global SUFFIX
+
+    QP_LOG_OUTPUT = './qpfstats_log_{}'.format(SUFFIX)
+
+    if os.path.isfile('./fstats_{}'.format(SUFFIX)):
+        # already exists
+        return
+
+    if args.keep_fstats_log:
+        with open(QP_LOG_OUTPUT, 'w') as outfile:
+            subprocess.call([*(['wsl'] if args.turn_on_wsl_for_admix_tools else []), 'qpfstats', '-p', 'parqpfstats_{}'.format(SUFFIX)], stdout=outfile)
+    else:
+        subprocess.call([*(['wsl'] if args.turn_on_wsl_for_admix_tools else []), 'qpfstats', '-p', 'parqpfstats_{}'.format(SUFFIX)])
+
+
 def clean_up_model_files(left, right, output, parqpadm, model):
     try:
         os.remove(left)
         os.remove(right)
-        os.remove(output)
+
+        if not args.keep_output_files:
+            os.remove(output)
+
         os.remove(parqpadm)
     except OSError:
         print("Error removing files for model {}. Runs are unaffected though.".format(model))
+
+
+def clean_up_fstats():
+    global SUFFIX
+    try:
+        if args.use_fstats_file is None:
+            os.remove('./parqpfstats_{}'.format(SUFFIX))
+
+        if (args.use_fstats_file is None) and (not args.keep_fstats_file):
+            os.remove('./fstats_{}'.format(SUFFIX))
+
+        if args.use_fstats_file is None:
+            os.remove('./poplist_{}'.format(SUFFIX))
+    except:
+        print("Error removing files for fstats. Runs are unaffected though.")
+        pass
 
 
 def weights_errors_pvalue(output):
@@ -257,12 +321,7 @@ def result_row(target, model, weights, errors, pvalue):
     ispass = float(pvalue) >= args.pmin
 
     for i in range(len(weights)):
-        ispass = ispass and ((
-            float(weights[i]) - args.error_coefficient * float(errors[i])
-        ) >= 0)
-        ispass = ispass and ((
-            float(weights[i]) + args.error_coefficient * float(errors[i])
-        ) <= 1)
+        ispass = ispass and (float(weights[i]) >= 0) and (float(errors[i]) >= 0)
 
     res += "{}\n".format(1 if ispass else 0)
 
@@ -313,8 +372,52 @@ def is_model_in_cache(model):
     return False
 
 
+def parse_args():
+    global parser, RESULTS_QUEUE, args, IND, SNP, GENO, CONFIG_FILE, MODELS_POOL, PID, SUFFIX, RESULTS, CACHE
+
+    RESULTS_QUEUE = Queue()
+    parser.add_argument('-i', '--ind', dest='ind', type=str, help='Path of the .ind file (e.g "./set.ind")', required=True)
+    parser.add_argument('-s', '--snp', dest='snp', type=str, help='Path of the .snp file (e.g "./set.snp")', required=True)
+    parser.add_argument('-g', '--geno', dest='geno', type=str, help='Path of the .geno file (e.g "./set.geno")', required=True)
+    parser.add_argument(
+        '-c', '--config', dest='config', type=str, default='./config.yml', help='Path to the YAML config file (default: "./config.yml")'
+    )
+    parser.add_argument(
+        '-n', '--nthreads', dest='nthreads', type=int, default=1, help='The number of models to run in parallel (default: 1)'
+    )
+    parser.add_argument('-e', '--error-coefficient', dest='error_coefficient', type=float, default=2.0, help='Error coefficient')
+    parser.add_argument('-p', '--pmin', dest='pmin', type=float, default=0.01, help='Minimum viable p-value')
+    parser.add_argument('--fstats', default=False, action='store_true')
+    parser.add_argument('--rotate', default=False, action='store_true')
+    parser.add_argument('--keep-fstats-file', default=False, action='store_true')
+    parser.add_argument('--keep-fstats-log', default=False, action='store_true')
+    parser.add_argument('--use-fstats-file', dest='use_fstats_file', type=str, default=None, help='Use provided fstats file')
+    parser.add_argument('--turn-on-wsl-for-admix-tools', default=False, action='store_true')
+
+    parser.add_argument('--keep-output-files', default=False, action='store_true')
+
+    args, _ = parser.parse_known_args()
+
+    IND = args.ind
+    SNP = args.snp
+    GENO = args.geno
+
+    CONFIG_FILE = args.config
+    MODELS_POOL = ThreadPoolExecutor(args.nthreads)
+
+    PID = os.getpid()
+
+    with open(CONFIG_FILE, 'rb') as tempconfig:
+        SUFFIX = hashlib.md5(tempconfig.read()).hexdigest()
+
+    RESULTS = './results_{}.csv'.format(SUFFIX)
+    CACHE = './cache_{}.txt'.format(SUFFIX)
+
+
 def main():
     global CORE_RIGHT, TARGET, SOURCES, CONFIG_FILE, MODELS_POOL
+
+    parse_args()
 
     with open(CONFIG_FILE, 'r') as infile:
         config = None
@@ -334,6 +437,12 @@ def main():
     
     print("Will try {} models".format(len(models)))
 
+    if args.fstats and args.use_fstats_file is None:
+        print("Running qpfstats (can take a while) ...")
+        generate_poplist(config)
+        generate_parqpfstats()
+        run_qpfstats()
+
     model_number = 1
     for model in models:
         if is_model_in_cache(model):
@@ -344,12 +453,16 @@ def main():
         if len(list(filter(lambda source: source.strip() != "", model))) < 2:
             print("{} - Skipping model {} because we need at least two sources.".format(model_number, model))
             model_number += 1
+            continue
 
         task = MODELS_POOL.submit(run, model_number, config[TARGET], model, source_sets, config[CORE_RIGHT])
         RESULTS_QUEUE.put(task)
         model_number += 1
 
     write_results()
+
+    if args.fstats:
+        clean_up_fstats()
 
 
 if __name__ == '__main__':

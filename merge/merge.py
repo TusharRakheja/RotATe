@@ -25,39 +25,11 @@ parser = argparse.ArgumentParser(
     epilog='Copyright (c) 2023 Tushar Rakheja (The MIT License)'
 )
 
-parser.add_argument('-i', '--ind', dest='ind', type=str, default=None, help='Path of the .ind file (e.g "./set.ind")')
-parser.add_argument('-s', '--snp', dest='snp', type=str, default=None, help='Path of the .snp file (e.g "./set.snp")')
-parser.add_argument('-g', '--geno', dest='geno', type=str, default=None, help='Path of the .geno file (e.g "./set.geno")')
-parser.add_argument('-f', '--fam', dest='fam', type=str, default=None, help='Path of the .fam file (e.g "./set.fam")')
-parser.add_argument('-bi', '--bim', dest='bim', type=str, default=None, help='Path of the .bim file (e.g "./set.bim")')
-parser.add_argument('-be', '--bed', dest='bed', type=str, default=None, help='Path of the .bed file (e.g "./set.bed")')
-parser.add_argument('-d', '--data', dest='data', type=str, help='Path of the raw data file (e.g "./23andMe.txt")', required=True)
-parser.add_argument('-p', '--plink', dest='plink', type=str, help='Command used to invoke plink on your machine (e.g. "plink")', required=True)
-parser.add_argument('-n', '--name', dest='name', type=str, help='A name for your sample to be used in the merged dataset (e.g. "tony23andMe")', required=True)
-parser.add_argument('-c', '--convertf', dest='convertf', type=str, help='Command used to invoke convertf on your machine (e.g. "convertf")', required=True)
-parser.add_argument('-cte', '--convert-to-eigenstrat', dest='convert_to_eigenstrat', type=str, default='yes', help='Convert the files to eigenstrat format after merging? (default: yes)')
-parser.add_argument('-se', '--sex', dest='sex', type=str, default=None, help="Sex of the sample ('m' or 'f')", required=True)
-
-args = parser.parse_args()
-
-if args.fam is not None and args.bim is not None and args.bed is not None:
-    TYPE = 'plink'
-elif args.ind is not None and args.snp is not None and args.geno is not None:
-    TYPE = 'eigenstrat'
-else:
-    print("[merge] You need to provide either plink style .fam, .bim and .bed files, or eigenstrat style .ind, .snp and .geno files.")
-    sys.exit(1)
-
-if TYPE == 'plink' and args.convert_to_eigenstrat == 'yes' and args.ind is None:
-    print("[merge] If you want to convert the merged set to eigenstrat, you need to provide an .ind file in addition to the plink set.")
-    
-
-PREFIX = (args.ind if TYPE == 'eigenstrat' else args.fam).split('/')[-1]
-PREFIX = PREFIX[:PREFIX.index('.')]
+args = None
+PREFIX = None
+DATAFILE = None
 
 PLINK_MISS = './plink.imiss'
-
-DATAFILE = './' + args.data.split('/')[-1]
 
 d3 = {}
 d4 = {}
@@ -149,7 +121,7 @@ def clean_and_convert_file():
 
     print("[merge] Cleaning and converting file...")
 
-    format = '23andMe'
+    format = args.file_type if args.file_type is not None else '23andMe'
 
     with open(DATAFILE, 'r') as infile:
         l = infile.readlines()
@@ -167,13 +139,18 @@ def clean_and_convert_file():
             continue
 
         if linestrp == 'rsid	chromosome	position	allele1	allele2':
-            format = 'Ancestry'
+            if args.file_type is None:
+                format = 'Ancestry'
             continue
     
-        if linestrp == 'Rsid	Chromosome	Position	Genotype':
-            format = 'Mapmygenome'
+        if linestrp == 'rsid	chromosome	position	genotype' or linestrp == 'Rsid	Chromosome	Position	Genotype':
+            if args.file_type is None:
+                format = 'Mapmygenome'
             continue
-            
+    
+        if 'hromosome' in linestrp or 'osition' in linestrp or 'llele' in linestrp or 'enotype' in linestrp:
+            continue
+
         l2.append(linestrp)
     
     l = l2
@@ -237,20 +214,20 @@ def gen_ct_to_plink():
 def convert_to_plink():
     global CT_TO_PLINK
 
-    subprocess.call(['wsl', args.convertf, '-p', CT_TO_PLINK])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_admix_tools else []), args.convertf, '-p', CT_TO_PLINK])
 
 
 def call_plink_on_file():
-    subprocess.call([args.plink, '--23file', args.data.split('/')[-1], '--out', args.name])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--23file', args.data.split('/')[-1], '--out', args.name])
 
 
 def prune_dataset():
     global PREFIX
-    subprocess.call([args.plink, '--bfile', PREFIX, '--write-snplist'])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', PREFIX, '--write-snplist'])
 
 
 def extract_snp_list():
-    subprocess.call([args.plink, '--bfile', args.name, '--extract', 'plink.snplist', '--make-bed', '--out', 'B1'])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', args.name, '--extract', 'plink.snplist', '--make-bed', '--out', 'B1'])
 
 
 def replace_content_of_fam():
@@ -270,10 +247,17 @@ def replace_content_of_fam():
 
     target_line = lines[0]
     target_line = target_line.replace('-9', '1')
-    
-    if args.sex == 'f':
-        target_line = target_line.replace(' 1', ' 2', 1)
 
+    target_line_parts = target_line.strip().split()
+
+    if args.sex == 'M':
+        target_line_parts[4] = '1'
+    elif args.sex == 'F':
+        target_line_parts[4] = '2'
+    elif args.sex == 'U':
+        target_line_parts[4] = '0'
+
+    target_line = ' '.join(target_line_parts) + '\n'
     target_line = target_line.replace('ID001', args.name)
 
     with open(fam, 'w') as outfile:
@@ -284,7 +268,7 @@ def attempt_merge():
     global PREFIX
     call = None
     try:
-        call = subprocess.call([args.plink, '--bfile', PREFIX, '--bmerge', 'B1.bed', 'B1.bim', 'B1.fam', '--indiv-sort', '0', '--allow-no-sex', '--make-bed', '--out', args.name])
+        call = subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', PREFIX, '--bmerge', 'B1.bed', 'B1.bim', 'B1.fam', '--indiv-sort', '0', '--allow-no-sex', '--make-bed', '--out', args.name])
     except:
         call = 1
 
@@ -297,9 +281,9 @@ def flip_snps():
     call = None
 
     try:
-        call = subprocess.call([args.plink, '--bfile', 'B1', '--flip', '{}-merge.missnp'.format(args.name), '--make-bed', '--out', 'B1_flip'])
+        call = subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', 'B1', '--flip', '{}-merge.missnp'.format(args.name), '--make-bed', '--out', 'B1_flip'])
         if call == 0:
-            call = subprocess.call([args.plink, '--bfile', PREFIX, '--bmerge', 'B1_flip.bed', 'B1_flip.bim', 'B1_flip.fam', '--indiv-sort', '0', '--allow-no-sex', '--make-bed', '--out', args.name])
+            call = subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', PREFIX, '--bmerge', 'B1_flip.bed', 'B1_flip.bim', 'B1_flip.fam', '--indiv-sort', '0', '--allow-no-sex', '--make-bed', '--out', args.name])
         else:
             print("[merge] Flip res = " + str(call))
     except:
@@ -314,9 +298,9 @@ def skip_snps():
     call = None
 
     try:
-        call = subprocess.call([args.plink, '--bfile', 'B1_flip', '--exclude', '{}-merge.missnp'.format(args.name), '--make-bed', '--allow-no-sex', '--out', 'B1_tmp'])
+        call = subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', 'B1_flip', '--exclude', '{}-merge.missnp'.format(args.name), '--make-bed', '--allow-no-sex', '--out', 'B1_tmp'])
         if call == 0:
-            call = subprocess.call([args.plink, '--bfile', PREFIX, '--bmerge', 'B1_tmp.bed', 'B1_tmp.bim', 'B1_tmp.fam', '--indiv-sort', '0', '--allow-no-sex', '--make-bed', '--out', args.name])
+            call = subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', PREFIX, '--bmerge', 'B1_tmp.bed', 'B1_tmp.bim', 'B1_tmp.fam', '--indiv-sort', '0', '--allow-no-sex', '--make-bed', '--out', args.name])
         else:
             print("[merge] Skip res = " + str(call))
     except:
@@ -342,7 +326,7 @@ def gen_ct_to_eigenstrat():
 def convert_to_eigenstrat():
     global CT_TO_EIGENSTRAT
 
-    subprocess.call(['wsl', args.convertf, '-p', CT_TO_EIGENSTRAT])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_admix_tools else []), args.convertf, '-p', CT_TO_EIGENSTRAT])
 
 
 def remove_original_dataset():
@@ -400,7 +384,7 @@ def prepare_final_ind():
 def gen_plink_imiss_on_og_set():
     global PREFIX, d3, d4, d5, PLINK_MISS
 
-    subprocess.call([args.plink, '--bfile', PREFIX, '--missing'])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', PREFIX, '--missing'])
 
     time.sleep(1)
 
@@ -423,7 +407,7 @@ def gen_plink_imiss_on_og_set():
 def check_plink_imiss_on_merged_set():
     global PLINK_MISS, d3, d4, d5
 
-    subprocess.call([args.plink, '--bfile', args.name, '--missing'])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', args.name, '--missing'])
 
     time.sleep(1)
 
@@ -471,9 +455,52 @@ def rename_plink_files():
     os.rename('./{}.bim'.format(args.name), './{}.bim'.format(PREFIX))
     os.rename('./{}.bed'.format(args.name), './{}.bed'.format(PREFIX))
     os.rename('./{}.fam'.format(args.name), './{}.fam'.format(PREFIX))
-    
+
+
+def parse_args():
+    global parser, args, PREFIX, DATAFILE, TYPE
+
+    parser.add_argument('-i', '--ind', dest='ind', type=str, default=None, help='Path of the .ind file (e.g "./set.ind")')
+    parser.add_argument('-s', '--snp', dest='snp', type=str, default=None, help='Path of the .snp file (e.g "./set.snp")')
+    parser.add_argument('-g', '--geno', dest='geno', type=str, default=None, help='Path of the .geno file (e.g "./set.geno")')
+    parser.add_argument('-f', '--fam', dest='fam', type=str, default=None, help='Path of the .fam file (e.g "./set.fam")')
+    parser.add_argument('-bi', '--bim', dest='bim', type=str, default=None, help='Path of the .bim file (e.g "./set.bim")')
+    parser.add_argument('-be', '--bed', dest='bed', type=str, default=None, help='Path of the .bed file (e.g "./set.bed")')
+    parser.add_argument('-d', '--data', dest='data', type=str, help='Path of the raw data file (e.g "./23andMe.txt")', required=True)
+    parser.add_argument('-p', '--plink', dest='plink', type=str, help='Command used to invoke plink on your machine (e.g. "plink")', required=True)
+    parser.add_argument('-n', '--name', dest='name', type=str, help='A name for your sample to be used in the merged dataset (e.g. "tony23andMe")', required=True)
+    parser.add_argument('-c', '--convertf', dest='convertf', type=str, help='Command used to invoke convertf on your machine (e.g. "convertf")', required=True)
+    parser.add_argument('-cte', '--convert-to-eigenstrat', dest='convert_to_eigenstrat', type=str, default='yes', help='Convert the files to eigenstrat format after merging? (default: yes)')
+    parser.add_argument('-se', '--sex', dest='sex', type=str, default=None, help="Sex of the sample ('M', 'F' or 'U')", required=True)
+    parser.add_argument('-ft', '--file-type', dest='file_type', type=str, default=None, help="Type of the raw data file ('Ancestry', '23andMe', or 'Mapmygenome')")
+    parser.add_argument('--turn-on-wsl-for-plink', default=False, action='store_true')
+    parser.add_argument('--turn-on-wsl-for-admix-tools', default=False, action='store_true')
+
+    args, _ = parser.parse_known_args()
+
+    args.sex = args.sex.upper()
+
+    if args.fam is not None and args.bim is not None and args.bed is not None:
+        TYPE = 'plink'
+    elif args.ind is not None and args.snp is not None and args.geno is not None:
+        TYPE = 'eigenstrat'
+    else:
+        print("[merge] You need to provide either plink style .fam, .bim and .bed files, or eigenstrat style .ind, .snp and .geno files.")
+        sys.exit(1)
+
+    if TYPE == 'plink' and args.convert_to_eigenstrat == 'yes' and args.ind is None:
+        print("[merge] If you want to convert the merged set to eigenstrat, you need to provide an .ind file in addition to the plink set.")
+        
+
+    PREFIX = (args.ind if TYPE == 'eigenstrat' else args.fam).split('/')[-1]
+    PREFIX = PREFIX[:PREFIX.index('.')]
+
+    DATAFILE = './' + args.data.split('/')[-1]
+
 
 def main():
+    parse_args()
+
     global WORKING, TYPE
 
     create_working_directory()
