@@ -115,12 +115,16 @@ def cleanup():
 def parse_args():
     global args    
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        prog='extract',
+        description='Extract a raw data file from a Plink or Eigenstrat set',
+        epilog='Copyright (c) 2023 Tushar Rakheja (The MIT License)'
+    )
 
     parser.add_argument('-s', '--set', dest='set', type=str, help='Name of your set', required=True)
     parser.add_argument('-p', '--plink', dest='plink', type=str, help='Command used to invoke plink on your machine (e.g. "plink")', required=True)
     parser.add_argument('-c', '--convertf', dest='convertf', type=str, help='Command used to invoke convertf on your machine (e.g. "convertf")', required=True)
-    parser.add_argument('-ctp', '--convert-to-plink', dest='convert_to_plink', type=str, default='no', help='Is the set in Eigenstrat format (.ind, .snp, .geno)? (yes or no, default: no)', required=False)
+    parser.add_argument('--convert-to-plink', default=False, action='store_true', help='Is the set in Eigenstrat format (.ind, .snp, .geno)? If yes, use this option')
     parser.add_argument('-id', '--id', dest='id', type=str, help='Name of your sample id (second column of the row in the .fam file)', required=True)
     parser.add_argument('-n', '--name', dest='name', type=str, default=None, help='Name of your extracted raw data file (defaults to the name of the smaple id)', required=False)
     parser.add_argument('--path', dest='path', type=str, default=None, help="Path to the folder in which your set lives (e.g. './', '/usr/bin/' etc)", required=True)
@@ -142,7 +146,7 @@ def main():
 
     action_dir = os.getcwd()
     
-    if args.convert_to_plink == 'yes':
+    if args.convert_to_plink:
         gen_ct_to_plink()
         convert_to_plink()
         os.remove(CT_TO_PLINK)
