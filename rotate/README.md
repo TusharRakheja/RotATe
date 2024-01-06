@@ -97,7 +97,8 @@ $ mgen rotate -i [path to .ind] -s [path to .snp] -g [path to .geno] -n [nthread
 | I11456     | ONGE.SG            | Iran_GanjDareh_N | WSHG            | Turkey_Boncuklu_N | 31.00%       | 48.80%       | 11.40%       | 8.80%        | 1.60%       | 2.70%       | 1.30%       | 1.80%       | 0.001487     |
 | I11456     | ONGE.SG            | Iran_GanjDareh_N | WSHG            | Levant_PPN        | 30.20%       | 49.20%       | 11.60%       | 9.00%        | 1.60%       | 2.70%       | 1.30%       | 1.80%       | 0.000874     |
 
-- To view all of the options you can use when running, just do:
+
+### Options
 ```
 $ mgen rotate -h
 
