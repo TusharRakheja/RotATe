@@ -185,7 +185,7 @@ def copy_eigenstrat_or_plink_files():
 
     print("[merge] Copying over Eigenstrat or Plink files...")
     
-    if args.convert_to_eigenstrat == 'yes' or TYPE == 'eigenstrat':
+    if args.convert_to_eigenstrat or TYPE == 'eigenstrat':
         shutil.copy(args.ind, WORKING)
 
     if TYPE == 'eigenstrat':
@@ -471,11 +471,11 @@ def parse_args():
     parser.add_argument('-p', '--plink', dest='plink', type=str, help='Command used to invoke plink on your machine (e.g. "plink")', required=True)
     parser.add_argument('-n', '--name', dest='name', type=str, help='A name for your sample to be used in the merged dataset (e.g. "tony23andMe")', required=True)
     parser.add_argument('-c', '--convertf', dest='convertf', type=str, help='Command used to invoke convertf on your machine (e.g. "convertf")', required=True)
-    parser.add_argument('-cte', '--convert-to-eigenstrat', dest='convert_to_eigenstrat', type=str, default='yes', help='Convert the files to eigenstrat format after merging? (default: yes)')
+    parser.add_argument('--convert-to-eigenstrat', default=False, action='store_true')
     parser.add_argument('-se', '--sex', dest='sex', type=str, default=None, help="Sex of the sample ('M', 'F' or 'U')", required=True)
     parser.add_argument('-ft', '--file-type', dest='file_type', type=str, default=None, help="Type of the raw data file ('Ancestry', '23andMe', or 'Mapmygenome')")
-    parser.add_argument('--turn-on-wsl-for-plink', default=False, action='store_true')
-    parser.add_argument('--turn-on-wsl-for-admix-tools', default=False, action='store_true')
+    parser.add_argument('--turn-on-wsl-for-plink', default=False, action='store_true', help="(If running on Windows) Use Plink via WSL")
+    parser.add_argument('--turn-on-wsl-for-admix-tools', default=False, action='store_true', help="(If running on Windows) Use AdmixTools like convertf via WSL")
 
     args, _ = parser.parse_known_args()
 
@@ -489,7 +489,7 @@ def parse_args():
         print("[merge] You need to provide either plink style .fam, .bim and .bed files, or eigenstrat style .ind, .snp and .geno files.")
         sys.exit(1)
 
-    if TYPE == 'plink' and args.convert_to_eigenstrat == 'yes' and args.ind is None:
+    if TYPE == 'plink' and args.convert_to_eigenstrat and args.ind is None:
         print("[merge] If you want to convert the merged set to eigenstrat, you need to provide an .ind file in addition to the plink set.")
         
 
@@ -546,7 +546,7 @@ def main():
         sys.exit(1)
 
 
-    if args.convert_to_eigenstrat == 'yes':
+    if args.convert_to_eigenstrat:
 
         gen_ct_to_eigenstrat()
 
