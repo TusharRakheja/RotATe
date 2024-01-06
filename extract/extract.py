@@ -26,7 +26,7 @@ def gen_ct_to_plink():
 def convert_to_plink():
     global CT_TO_PLINK
 
-    subprocess.call(['wsl', args.convertf, '-p', CT_TO_PLINK])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_admix_tools else []), args.convertf, '-p', CT_TO_PLINK])
 
 
 def make_nfile():
@@ -55,12 +55,12 @@ def make_nfile():
 def make_custom_set():
     global N_FILE
 
-    subprocess.call([args.plink, '--bfile', args.set, '--keep', N_FILE, '--make-bed', '--out', 'A'])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', args.set, '--keep', N_FILE, '--make-bed', '--out', 'A'])
     os.remove(N_FILE)
 
 
 def get_raw_data():
-    subprocess.call([args.plink, '--bfile', 'A', '--recode', '23', '--out', args.name])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--bfile', 'A', '--recode', '23', '--out', args.name])
 
 
 def cleanup():
@@ -128,6 +128,8 @@ def parse_args():
     parser.add_argument('-id', '--id', dest='id', type=str, help='Name of your sample id (second column of the row in the .fam file)', required=True)
     parser.add_argument('-n', '--name', dest='name', type=str, default=None, help='Name of your extracted raw data file (defaults to the name of the smaple id)', required=False)
     parser.add_argument('--path', dest='path', type=str, default=None, help="Path to the folder in which your set lives (e.g. './', '/usr/bin/' etc)", required=True)
+    parser.add_argument('--turn-on-wsl-for-plink', default=False, action='store_true', help="(If running on Windows) Use Plink via WSL")
+    parser.add_argument('--turn-on-wsl-for-admix-tools', default=False, action='store_true', help="(If running on Windows) Use AdmixTools like convertf via WSL")
 
     args, _ = parser.parse_known_args()
 
