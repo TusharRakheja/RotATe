@@ -1,20 +1,21 @@
-<img src="https://github.com/TusharRakheja/rotATe/raw/main/title.png" width="auto" height="100px" />
+<img src="https://github.com/TusharRakheja/mgen/raw/main/rotate/title.png" width="auto" height="100px" />
 
 ___
 
-**rotAte** is a script to run rotating qpAdm models using [AdmixTools](https://github.com/DReichLab/AdmixTools)
+**rotATe** is a tool to run static or rotating (aka competing) qpAdm models using [AdmixTools](https://github.com/DReichLab/AdmixTools)
 
 ### Dependencies
 
-- Python 3.8+
-- AdmixTools
+- Python 3.10 (if running on Linux or MacOS)
+- AdmixTools like `qpAdm`, `qpfstats` etc in your path
 
 ### Usage
 
-- Place the `rotate.py` script in your `tools` directory. This is the same directory that contains the `.ind`, `.snp`, and `.geno` files.
+- Download this repo and add the root directory to PATH.
+
 - Make a config file after the example `config.yml` in the repo, containing your target, your core sources, and your rotating sources. For example:
 
-**Note**: All sources as well as the target should be present in the `.ind` file.
+**Note**: All sources as well as the target should be present in the `.ind` file of your Eigenstrat set.
 
 ```yaml
 core_right:
@@ -48,17 +49,12 @@ sources:
     - "Levant_PPN"
 ```
 
-- To view all of the script's options, do:
+- Run with: 
 ```
-python3 rotate.py -h
-```
-
-- Run the script with: 
-```
-python3 rotate.py -i [name.ind] -s [name.snp] -g [name.geno] -n [nthreads] -c ./config.yml
+$ mgen rotate -i [path to .ind] -s [path to .snp] -g [path to .geno] -n [nthreads] -c [path to config.yml]
 ```
 
-- You can tail the results using `tail -f "./results_$(md5sum config.yml | awk '{print $1}').csv"`.
+- You can tail the results using `tail -f "./results_$(md5sum [path to config.yml] | awk '{print $1}').csv"`.
 
 - When done, you can open the resulting csv file in Excel and trim the target name, sort by p-value etc.
 
@@ -100,3 +96,37 @@ python3 rotate.py -i [name.ind] -s [name.snp] -g [name.geno] -n [nthreads] -c ./
 | I11456     | ONGE.SG            | Iran_Wezmeh_N.SG | TTK             | Levant_PPN        | 29.60%       | 47.10%       | 15.30%       | 7.90%        | 1.60%       | 2.30%       | 1.40%       | 1.80%       | 0.002799     |
 | I11456     | ONGE.SG            | Iran_GanjDareh_N | WSHG            | Turkey_Boncuklu_N | 31.00%       | 48.80%       | 11.40%       | 8.80%        | 1.60%       | 2.70%       | 1.30%       | 1.80%       | 0.001487     |
 | I11456     | ONGE.SG            | Iran_GanjDareh_N | WSHG            | Levant_PPN        | 30.20%       | 49.20%       | 11.60%       | 9.00%        | 1.60%       | 2.70%       | 1.30%       | 1.80%       | 0.000874     |
+
+- To view all of the options you can use when running, just do:
+```
+$ mgen rotate -h
+
+usage: rotate [-h] -i IND -s SNP -g GENO [-c CONFIG] [-n NTHREADS] [-p PMIN]
+              [--fstats] [--no-compete] [--keep-fstats-file]
+              [--keep-fstats-log] [--use-fstats-file USE_FSTATS_FILE]
+              [--turn-on-wsl-for-admix-tools] [--keep-output-files]
+
+Run rotating qpAdm models, with or without competition
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -i IND, --ind IND     Path to the .ind file (e.g "./set.ind")
+  -s SNP, --snp SNP     Path to the .snp file (e.g "./set.snp")
+  -g GENO, --geno GENO  Path to the .geno file (e.g "./set.geno")
+  -c CONFIG, --config CONFIG
+                        Path to the YAML config file (default: "./config.yml")
+  -n NTHREADS, --nthreads NTHREADS
+                        The number of models to run in parallel (default: 1)
+  -p PMIN, --pmin PMIN  Minimum viable p-value
+  --fstats              Pre-compute fstats for the whole config using qpfstats
+  --no-compete          Run the models in the config file without model
+                        competition
+  --keep-fstats-file    Do not delete the pre-computed fstats file
+  --keep-fstats-log     Do not delete the qpfstats log file
+  --use-fstats-file USE_FSTATS_FILE
+                        Use pre-computed fstats file
+  --turn-on-wsl-for-admix-tools
+                        (If running on Windows) Use AdmixTools like qpAdm and
+                        qpfstats via WSL
+  --keep-output-files   Do not delete the qpAdm output for each model
+```

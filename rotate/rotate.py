@@ -27,7 +27,7 @@ CACHE = None
 
 parser = argparse.ArgumentParser(
     prog='rotate',
-    description='Run rotating qpAdm models',
+    description='Run rotating qpAdm models, with or without competition',
     epilog='Copyright (c) 2023 Tushar Rakheja (The MIT License)'
 )
 
@@ -54,7 +54,6 @@ def is_valid(conf):
             if not isinstance(source, str):
                 return False
 
-    #print("IND: {}".format(IND))
     with open(IND, 'r') as infile:
         l = infile.readlines()
 
@@ -115,7 +114,7 @@ def run(model_number, target, model, source_sets, core_sources):
                         continue
 
                     if source not in model:
-                        if args.rotate:
+                        if not args.no_compete:
                             outfile.write("{}\n".format(source))
 
 
@@ -376,25 +375,24 @@ def parse_args():
     global parser, RESULTS_QUEUE, args, IND, SNP, GENO, CONFIG_FILE, MODELS_POOL, PID, SUFFIX, RESULTS, CACHE
 
     RESULTS_QUEUE = Queue()
-    parser.add_argument('-i', '--ind', dest='ind', type=str, help='Path of the .ind file (e.g "./set.ind")', required=True)
-    parser.add_argument('-s', '--snp', dest='snp', type=str, help='Path of the .snp file (e.g "./set.snp")', required=True)
-    parser.add_argument('-g', '--geno', dest='geno', type=str, help='Path of the .geno file (e.g "./set.geno")', required=True)
+    parser.add_argument('-i', '--ind', dest='ind', type=str, help='Path to the .ind file (e.g "./set.ind")', required=True)
+    parser.add_argument('-s', '--snp', dest='snp', type=str, help='Path to the .snp file (e.g "./set.snp")', required=True)
+    parser.add_argument('-g', '--geno', dest='geno', type=str, help='Path to the .geno file (e.g "./set.geno")', required=True)
     parser.add_argument(
         '-c', '--config', dest='config', type=str, default='./config.yml', help='Path to the YAML config file (default: "./config.yml")'
     )
     parser.add_argument(
         '-n', '--nthreads', dest='nthreads', type=int, default=1, help='The number of models to run in parallel (default: 1)'
     )
-    parser.add_argument('-e', '--error-coefficient', dest='error_coefficient', type=float, default=2.0, help='Error coefficient')
     parser.add_argument('-p', '--pmin', dest='pmin', type=float, default=0.01, help='Minimum viable p-value')
-    parser.add_argument('--fstats', default=False, action='store_true')
-    parser.add_argument('--rotate', default=False, action='store_true')
-    parser.add_argument('--keep-fstats-file', default=False, action='store_true')
-    parser.add_argument('--keep-fstats-log', default=False, action='store_true')
-    parser.add_argument('--use-fstats-file', dest='use_fstats_file', type=str, default=None, help='Use provided fstats file')
-    parser.add_argument('--turn-on-wsl-for-admix-tools', default=False, action='store_true')
+    parser.add_argument('--fstats', default=False, action='store_true', help='Pre-compute fstats for the whole config using qpfstats')
+    parser.add_argument('--no-compete', default=False, action='store_true', help='Run the models in the config file without model competition')
+    parser.add_argument('--keep-fstats-file', default=False, action='store_true', help='Do not delete the pre-computed fstats file')
+    parser.add_argument('--keep-fstats-log', default=False, action='store_true', help="Do not delete the qpfstats log file")
+    parser.add_argument('--use-fstats-file', dest='use_fstats_file', type=str, default=None, help='Use pre-computed fstats file')
+    parser.add_argument('--turn-on-wsl-for-admix-tools', default=False, action='store_true', help="(If running on Windows) Use AdmixTools like qpAdm and qpfstats via WSL")
 
-    parser.add_argument('--keep-output-files', default=False, action='store_true')
+    parser.add_argument('--keep-output-files', default=False, action='store_true', help="Do not delete the qpAdm output for each model")
 
     args, _ = parser.parse_known_args()
 

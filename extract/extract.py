@@ -1,7 +1,7 @@
 import subprocess
-import os
 import argparse
 import sys
+import os
 
 CT_TO_PLINK = './ct_to_plink'
 
@@ -65,49 +65,51 @@ def get_raw_data():
 
 def cleanup():
     global N_FILE
-    prob = False
+
     try:
         os.remove('./A.bed')
     except:
-        prob = True
+        pass
     
     try:
         os.remove('./A.bim')
     except:
-        prob = True
+        pass
     
     try:
         os.remove('./A.fam')
     except:
-        prob = True
+        pass
     
     try:
         os.remove('./A.hh')
     except:
-        prob = True
+        pass
     
     try:
         os.remove('./A.log')
     except:
-        prob = True
+        pass
     
     try:
         os.remove('./A.nosex')
     except:
-        prob = True
+        pass
     
     try:
         os.remove('./{}.hh'.format(args.name))
     except:
-        prob = True
+        pass
     
     try:
         os.remove('./{}.log'.format(args.name))
     except:
-        prob = True
+        pass
     
-    if prob:
-        print("Some problem when cleaning up files that are no longer needed. But your sample should be extracted by now.")
+    try:
+        os.remove('./{}.nosex'.format(args.name))
+    except:
+        pass
 
 
 def parse_args():
@@ -121,6 +123,7 @@ def parse_args():
     parser.add_argument('-ctp', '--convert-to-plink', dest='convert_to_plink', type=str, default='no', help='Is the set in Eigenstrat format (.ind, .snp, .geno)? (yes or no, default: no)', required=False)
     parser.add_argument('-id', '--id', dest='id', type=str, help='Name of your sample id (second column of the row in the .fam file)', required=True)
     parser.add_argument('-n', '--name', dest='name', type=str, default=None, help='Name of your extracted raw data file (defaults to the name of the smaple id)', required=False)
+    parser.add_argument('--path', dest='path', type=str, default=None, help="Path to the folder in which your set lives (e.g. './', '/usr/bin/' etc)", required=True)
 
     args, _ = parser.parse_known_args()
 
@@ -132,6 +135,12 @@ def main():
     global CT_TO_PLINK
 
     parse_args()
+
+    cur_dir = os.getcwd()
+
+    os.chdir(args.path)
+
+    action_dir = os.getcwd()
     
     if args.convert_to_plink == 'yes':
         gen_ct_to_plink()
@@ -139,9 +148,19 @@ def main():
         os.remove(CT_TO_PLINK)
     
     make_nfile()
+
     make_custom_set()
+
     get_raw_data()
+
     cleanup()
+
+    os.chdir(cur_dir)
+
+    os.rename(
+        os.path.join(action_dir, './{}.txt'.format(args.name)),
+        os.path.join(cur_dir, './{}.txt'.format(args.name)),
+    )
 
 
 if __name__ == '__main__':

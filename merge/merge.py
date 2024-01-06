@@ -1,5 +1,6 @@
 import subprocess
 import argparse
+import pathlib
 import errno
 import shutil
 import time
@@ -202,9 +203,9 @@ def gen_ct_to_plink():
     global CT_TO_PLINK, PREFIX
 
     with open(CT_TO_PLINK, 'w') as outfile:
-        outfile.write("genotypename: {}\n".format(args.geno.split('/')[-1]))
-        outfile.write("snpname: {}\n".format(args.snp.split('/')[-1]))
-        outfile.write("indivname: {}\n".format(args.ind.split('/')[-1]))
+        outfile.write("genotypename: {}\n".format(pathlib.PurePath(args.geno).name))
+        outfile.write("snpname: {}\n".format(pathlib.PurePath(args.snp).name))
+        outfile.write("indivname: {}\n".format(pathlib.PurePath(args.ind).name))
         outfile.write("outputformat: PACKEDPED\n")
         outfile.write("genotypeoutname: {}.bed\n".format(PREFIX))
         outfile.write("snpoutname: {}.bim\n".format(PREFIX))
@@ -218,7 +219,7 @@ def convert_to_plink():
 
 
 def call_plink_on_file():
-    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--23file', args.data.split('/')[-1], '--out', args.name])
+    subprocess.call([*(['wsl'] if args.turn_on_wsl_for_plink else []), args.plink, '--23file', pathlib.PurePath(args.data).name, '--out', args.name])
 
 
 def prune_dataset():
@@ -492,10 +493,10 @@ def parse_args():
         print("[merge] If you want to convert the merged set to eigenstrat, you need to provide an .ind file in addition to the plink set.")
         
 
-    PREFIX = (args.ind if TYPE == 'eigenstrat' else args.fam).split('/')[-1]
+    PREFIX = pathlib.PurePath(args.ind if TYPE == 'eigenstrat' else args.fam).name
     PREFIX = PREFIX[:PREFIX.index('.')]
 
-    DATAFILE = './' + args.data.split('/')[-1]
+    DATAFILE = './' + pathlib.PurePath(args.data).name
 
 
 def main():

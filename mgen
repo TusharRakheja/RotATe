@@ -9,19 +9,17 @@ from extract import extract
 
 parser = argparse.ArgumentParser(
     prog='mgen',
+    add_help=False,
     description='Mehrgarh Genetics Toolkit',
     epilog='Copyright (c) 2023 Tushar Rakheja (The MIT License)'
 )
 
-parser.add_argument('op', nargs=1, default=os.getcwd(), help="The operation you want to perform ('merge', 'rotate', 'extract')")
-
+parser.add_argument('op', nargs='?', default=os.getcwd(), help="The operation you want to perform ('merge', 'rotate', 'extract')")
 
 def main():
     global parser
 
     args, _ = parser.parse_known_args()
-
-    args.op = args.op[0]
 
     if args.op == 'rotate':
         rotate.main()
@@ -30,7 +28,7 @@ def main():
     elif args.op == 'extract':
         extract.main()
     else:
-        print("Unsupported operation '{}'.".format(args.op))
+        parser.print_help()
         sys.exit(1)
 
 
