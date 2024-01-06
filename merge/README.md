@@ -1,4 +1,4 @@
-<img src="https://github.com/TusharRakheja/mgen/raw/main/main/title.png" width="auto" height="100px" />
+<img src="https://github.com/TusharRakheja/mgen/raw/main/merge/title.png" width="auto" height="100px" />
 
 ___
 
