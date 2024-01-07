@@ -6,7 +6,7 @@ ___
 
 ### Dependencies
 
-- [Plink 1.90](https://www.cog-genomics.org/plink2/)
+- [Plink 1.90](https://www.cog-genomics.org/plink2/) in your path
 - Python 3.10 (if running on Linux or MacOS)
 - [AdmixTools](https://github.com/DReichLab/AdmixTools) like `convertf` in your path
 
