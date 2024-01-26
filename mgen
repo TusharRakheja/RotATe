@@ -6,6 +6,7 @@ import os
 from rotate import rotate
 from merge import merge
 from extract import extract
+from cache import cache
 
 parser = argparse.ArgumentParser(
     prog='mgen',
@@ -27,6 +28,8 @@ def main():
         merge.main()
     elif args.op == 'extract':
         extract.main()
+    elif args.op == 'cache':
+        cache.main()
     else:
         parser.print_help()
         sys.exit(1)

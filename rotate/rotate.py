@@ -150,7 +150,7 @@ def generate_parqpadm(parqpadm, left, right):
     global IND, SNP, GENO, SUFFIX
     with open(parqpadm, 'w') as outfile:
 
-        if args.fstats == 'yes':
+        if args.fstats:
             fstats_filename = 'fstats_{}'.format(SUFFIX) if args.use_fstats_file is None else args.use_fstats_file.split('/')[-1]
             outfile.write('fstatsname:      {}\n'.format(fstats_filename))
         else:
@@ -336,11 +336,11 @@ def write_headers(num_sources):
     outfile = open(RESULTS, 'w')
 
     outfile.write('Target,')
-    for i in range(num_sources):
+    for i in range(num_sources if args.rank is None else args.rank):
         outfile.write('Source {},'.format(i + 1))
-    for i in range(num_sources):
+    for i in range(num_sources if args.rank is None else args.rank):
         outfile.write('Weight {},'.format(i + 1))
-    for i in range(num_sources):
+    for i in range(num_sources if args.rank is None else args.rank):
         outfile.write('Error {},'.format(i + 1))
     outfile.write('p-value,Complexity,Pass?\n')
 
@@ -384,15 +384,16 @@ def parse_args():
     parser.add_argument(
         '-n', '--nthreads', dest='nthreads', type=int, default=1, help='The number of models to run in parallel (default: 1)'
     )
-    parser.add_argument('-p', '--pmin', dest='pmin', type=float, default=0.01, help='Minimum viable p-value')
+    parser.add_argument('-p', '--pmin', dest='pmin', type=float, default=0.05, help='Minimum viable p-value')
     parser.add_argument('--fstats', default=False, action='store_true', help='Pre-compute fstats for the whole config using qpfstats')
     parser.add_argument('--no-compete', default=False, action='store_true', help='Run the models in the config file without model competition')
     parser.add_argument('--keep-fstats-file', default=False, action='store_true', help='Do not delete the pre-computed fstats file')
     parser.add_argument('--keep-fstats-log', default=False, action='store_true', help="Do not delete the qpfstats log file")
     parser.add_argument('--use-fstats-file', dest='use_fstats_file', type=str, default=None, help='Use pre-computed fstats file')
     parser.add_argument('--turn-on-wsl-for-admix-tools', default=False, action='store_true', help="(If running on Windows) Use AdmixTools like qpAdm and qpfstats via WSL")
-
+    parser.add_argument('-r', '--rank', dest='rank', type=int, default=None, help='The rank of the models you want to run (i.e. how many sources per model)?')
     parser.add_argument('--keep-output-files', default=False, action='store_true', help="Do not delete the qpAdm output for each model")
+    parser.add_argument('--dry-run', default=False, action='store_true', help="Dry run (creates an empty results file but a full cache file)")
 
     args, _ = parser.parse_known_args()
 
@@ -412,6 +413,17 @@ def parse_args():
     CACHE = './cache_{}.txt'.format(SUFFIX)
 
 
+def get_model_list(source_sets):
+    global args
+
+    if args.rank is None:
+        return list(itertools.product(*source_sets))
+    else:
+        all_sources = list(set(itertools.chain.from_iterable(source_sets)))
+        all_sources.remove('')
+        return list(itertools.combinations(all_sources, args.rank))
+
+
 def main():
     global CORE_RIGHT, TARGET, SOURCES, CONFIG_FILE, MODELS_POOL
 
@@ -429,13 +441,13 @@ def main():
 
     source_sets = config[SOURCES]
 
-    models = list(itertools.product(*source_sets))
+    models = get_model_list(source_sets)
 
     write_headers(len(source_sets))
     
     print("Will try {} models".format(len(models)))
 
-    if args.fstats and args.use_fstats_file is None:
+    if not args.dry_run and args.fstats and args.use_fstats_file is None:
         print("Running qpfstats (can take a while) ...")
         generate_poplist(config)
         generate_parqpfstats()
@@ -453,8 +465,12 @@ def main():
             model_number += 1
             continue
 
-        task = MODELS_POOL.submit(run, model_number, config[TARGET], model, source_sets, config[CORE_RIGHT])
-        RESULTS_QUEUE.put(task)
+        if args.dry_run:
+            print("{} - Running model {}".format(model_number, model))
+            add_model_to_cache(model)
+        else:
+            task = MODELS_POOL.submit(run, model_number, config[TARGET], model, source_sets, config[CORE_RIGHT])
+            RESULTS_QUEUE.put(task)
         model_number += 1
 
     write_results()
