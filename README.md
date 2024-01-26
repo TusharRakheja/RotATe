@@ -34,3 +34,4 @@ Here are the tools `mgen` has right now:
 - [rotate](https://github.com/TusharRakheja/mgen/tree/main/rotate)
 - [merge](https://github.com/TusharRakheja/mgen/tree/main/merge)
 - [extract](https://github.com/TusharRakheja/mgen/tree/main/extract)
+- [cache](https://github.com/TusharRakheja/mgen/tree/main/cache)
