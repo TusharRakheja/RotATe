@@ -394,6 +394,7 @@ def parse_args():
     parser.add_argument('-r', '--rank', dest='rank', type=int, default=None, help='The rank of the models you want to run (i.e. how many sources per model)?')
     parser.add_argument('--keep-output-files', default=False, action='store_true', help="Do not delete the qpAdm output for each model")
     parser.add_argument('--dry-run', default=False, action='store_true', help="Dry run (creates an empty results file but a full cache file)")
+    parser.add_argument('--max-rank', default=False, action='store_true', help="The --rank argument should be treated as a max rank")
 
     args, _ = parser.parse_known_args()
 
@@ -421,7 +422,20 @@ def get_model_list(source_sets):
     else:
         all_sources = list(set(itertools.chain.from_iterable(source_sets)))
         all_sources.remove('')
-        return list(itertools.combinations(all_sources, args.rank))
+
+        if not args.max_rank:
+            return list(itertools.combinations(all_sources, args.rank))
+        else:
+            all_models = []
+            for rank in range(1, args.rank + 1):
+                models += list(itertools.combinations(all_sources, rank))
+                for model in models:
+                    while len(model) < args.rank:
+                        model.append("")
+
+                all_models += models
+
+            return all_models
 
 
 def main():
