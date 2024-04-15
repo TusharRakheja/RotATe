@@ -428,7 +428,11 @@ def get_model_list(source_sets):
         else:
             all_models = []
             for rank in range(1, args.rank + 1):
-                models = list(itertools.combinations(all_sources, rank))
+                models_ = list(itertools.combinations(all_sources, rank))
+                models = []
+                for model in models_:
+                    models.append(list(model))
+
                 for model in models:
                     while len(model) < args.rank:
                         model.append("")
