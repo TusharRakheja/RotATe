@@ -392,6 +392,7 @@ def parse_args():
     parser.add_argument('--use-fstats-file', dest='use_fstats_file', type=str, default=None, help='Use pre-computed fstats file')
     parser.add_argument('--turn-on-wsl-for-admix-tools', default=False, action='store_true', help="(If running on Windows) Use AdmixTools like qpAdm and qpfstats via WSL")
     parser.add_argument('-r', '--rank', dest='rank', type=int, default=None, help='The rank of the models you want to run (i.e. how many sources per model)?')
+    parser.add_argument('-mr', '--min-rank', dest='min_rank', type=int, default=None, help='The min rank of the models you want to run (i.e. how many sources per model)?')
     parser.add_argument('--keep-output-files', default=False, action='store_true', help="Do not delete the qpAdm output for each model")
     parser.add_argument('--dry-run', default=False, action='store_true', help="Dry run (creates an empty results file but a full cache file)")
     parser.add_argument('--max-rank', default=False, action='store_true', help="The --rank argument should be treated as a max rank")
@@ -427,7 +428,7 @@ def get_model_list(source_sets):
             return list(itertools.combinations(all_sources, args.rank))
         else:
             all_models = []
-            for rank in range(1, args.rank + 1):
+            for rank in range(1 if args.min_rank is None else args.min_rank, args.rank + 1):
                 models_ = list(itertools.combinations(all_sources, rank))
                 models = []
                 for model in models_:
